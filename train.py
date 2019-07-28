@@ -21,6 +21,7 @@ from torchvision import datasets
 from torchvision import transforms
 from torch.autograd import Variable
 import torch.optim as optim
+from tensorboardX import SummaryWriter
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -33,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
     parser.add_argument("--checkpoint_interval", type=int, default=1, help="interval between saving model weights")
-    parser.add_argument("--evaluation_interval", type=int, default=1, help="interval evaluations on validation set")
+    parser.add_argument("--evaluation_interval", type=int, default=3, help="interval evaluations on validation set")
     parser.add_argument("--compute_map", default=False, help="if True computes mAP every tenth batch")
     parser.add_argument("--multiscale_training", default=True, help="allow for multi-scale training")
     opt = parser.parse_args()
@@ -74,6 +75,9 @@ if __name__ == "__main__":
         collate_fn=dataset.collate_fn,
     )
 
+    #tensorboardX
+    writer=SummaryWriter(comment='test2')
+
     optimizer = torch.optim.Adam(model.parameters())
 
     metrics = [
@@ -110,6 +114,9 @@ if __name__ == "__main__":
                 optimizer.step()
                 optimizer.zero_grad()
 
+            #tensorboardX
+            writer.add_scalar('Train_loss',loss,epoch)
+
             # ----------------
             #   Log progress
             # ----------------
@@ -142,12 +149,15 @@ if __name__ == "__main__":
             epoch_batches_left = len(dataloader) - (batch_i + 1)
             time_left = datetime.timedelta(seconds=epoch_batches_left * (time.time() - start_time) / (batch_i + 1))
             log_str += f"\n---- ETA {time_left}"
+            log_str += f"\n---- ETA {time_left}"
 
             print(log_str)
 
             model.seen += imgs.size(0)
 
-        if epoch % opt.evaluation_interval == 0:
+#            torch.save(model.state_dict(), 'modeltest.pth')
+
+        if epoch+1 % opt.evaluation_interval == 0:
             print("\n---- Evaluating Model ----")
             # Evaluate the model on the validation set
             precision, recall, AP, f1, ap_class = evaluate(
@@ -157,7 +167,7 @@ if __name__ == "__main__":
                 conf_thres=0.5,
                 nms_thres=0.5,
                 img_size=opt.img_size,
-                batch_size=8,
+                batch_size=opt.batch_size,
             )
             evaluation_metrics = [
                 ("val_precision", precision.mean()),
@@ -171,8 +181,14 @@ if __name__ == "__main__":
             ap_table = [["Index", "Class name", "AP"]]
             for i, c in enumerate(ap_class):
                 ap_table += [[c, class_names[c], "%.5f" % AP[i]]]
+                writer.add_scalar('Train_AP_%s'%class_names[c], AP[i], epoch)
+
             print(AsciiTable(ap_table).table)
             print(f"---- mAP {AP.mean()}")
 
         if epoch % opt.checkpoint_interval == 0:
             torch.save(model.state_dict(), f"checkpoints/yolov3_ckpt_%d.pth" % epoch)
+
+    #tensorboardX
+
+    writer.close()
