@@ -1,0 +1,1 @@
+python3 train.py --model_def config/yolov3-custom.cfg --data_config config/custom.data --pretrained_weights checkpoints/yolov3_ckpt_98.pth
